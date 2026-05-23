@@ -43,6 +43,7 @@ const TOOL_RUNTIME_LABELS: Record<ToolCallEvent['name'], string> = {
   filterWorks: '筛选过滤',
   getAuthorWorks: '作者追踪',
   rankAndDeduplicate: '排序去重',
+  searchMultiSource: '多源学术检索',
 }
 
 function buildHeartbeatThinking(
@@ -428,6 +429,25 @@ async function runDiscoveryPass(
   )
   onProgress?.(`关键词检索已返回 ${keywordSearchResults.reduce((sum, result) => sum + result.works.length, 0)} 篇候选。`)
 
+  onThinking?.('正在跨 ArXiv、Semantic Scholar、PubMed、CrossRef、medRxiv 并行检索，扩展学术覆盖范围。')
+  let multiSourceResult: { works: SearchPaper[]; sourceBreakdown?: Array<{ source: string; count: number; error?: string }> } | null = null
+  try {
+    multiSourceResult = await callTool(tools.searchMultiSource, {
+      query: searchQueries.slice(0, 3).join(' | '),
+      maxResultsPerSource: Math.min(filters.maxResults || 6, 8),
+      fromYear: filters.fromYear,
+      toYear: filters.toYear,
+      openAccessOnly: filters.openAccessOnly,
+    }, abortSignal)
+    const breakdown = (multiSourceResult.sourceBreakdown || [])
+      .filter(s => s.count > 0)
+      .map(s => s.source + ' ' + s.count + '篇')
+      .join('、')
+    onProgress?.(`多源检索返回 ${multiSourceResult.works.length} 篇候选${breakdown ? '（' + breakdown + '）' : ''}。`)
+  } catch {
+    onThinking?.('多源检索遇到问题，将仅使用 OpenAlex 结果继续。')
+  }
+
   onThinking?.(`使用 ${intent.coreConcepts.slice(0, 2).join('、')} 查询概念树，用于扩展检索范围到相关领域。`)
   const conceptTreeResults = await collectParallelCalls(
     intent.coreConcepts.slice(0, 2).map(conceptName => () =>
@@ -468,6 +488,7 @@ async function runDiscoveryPass(
     [
       ...keywordSearchResults.flatMap(result => result.works),
       ...conceptSearchResults.flatMap(result => result.works),
+      ...(multiSourceResult?.works || []),
     ],
     queryGroups,
     extraKeywords,

@@ -12,6 +12,7 @@ const TOOL_CONFIG: Record<ToolCallEvent['name'], { icon: string; label: string }
   filterWorks: { icon: 'filter', label: '筛选结果' },
   getAuthorWorks: { icon: 'author', label: '获取作者作品' },
   rankAndDeduplicate: { icon: 'rank', label: '排序去重' },
+  searchMultiSource: { icon: 'search', label: '多源学术检索' },
 }
 
 function ToolIcon({ type, size = 14 }: { type: string; size?: number }) {

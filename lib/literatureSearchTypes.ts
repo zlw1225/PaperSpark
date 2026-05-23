@@ -176,6 +176,7 @@ export interface ToolCallEvent {
     | 'filterWorks'
     | 'getAuthorWorks'
     | 'rankAndDeduplicate'
+    | 'searchMultiSource'
   status: 'running' | 'completed' | 'error'
   inputSummary: string
   resultCount?: number

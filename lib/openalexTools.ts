@@ -7,6 +7,12 @@ import {
   scoreKeywordMatches,
   searchWorksOnOpenAlex,
 } from './openalex'
+import {
+  searchMultipleSources,
+  deduplicatePapers,
+  type SearchSource,
+  type MultiSearchResult,
+} from './searchSources'
 import type {
   FilterCriteria,
   FilterWorksOutput,
@@ -666,6 +672,75 @@ export function createOpenAlexToolset(context: ToolContext) {
     ),
   })
 
+  const searchMultiSource = tool({
+    description: '跨多个学术数据库并行检索（ArXiv、Semantic Scholar、PubMed、CrossRef、medRxiv），返回去重后的合并结果。适合需要广泛覆盖的文献调研。',
+    inputSchema: jsonSchema<{
+      query: string
+      sources?: SearchSource[]
+      maxResultsPerSource?: number
+      fromYear?: number
+      toYear?: number
+      openAccessOnly?: boolean
+    }>({
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: '检索关键词或研究问题。' },
+        sources: {
+          type: 'array',
+          items: { type: 'string', enum: ['arxiv', 'semantic_scholar', 'pubmed', 'crossref', 'medrxiv', 'biorxiv'] },
+          description: '要搜索的数据库，默认全部。',
+        },
+        maxResultsPerSource: { type: 'number', description: '每个数据源返回的最大结果数，默认 8。' },
+        fromYear: { type: 'number', description: '起始年份。' },
+        toYear: { type: 'number', description: '结束年份。' },
+        openAccessOnly: { type: 'boolean', description: '是否只返回开放获取论文。' },
+      },
+      required: ['query'],
+    }),
+    outputSchema: jsonSchema({
+      type: 'object',
+      properties: {
+        totalFound: { type: 'number' },
+        sourcesSearched: { type: 'number' },
+        sourcesFailed: { type: 'number' },
+        works: { type: 'array', items: paperSchema },
+        sourceBreakdown: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              source: { type: 'string' },
+              count: { type: 'number' },
+              error: { type: 'string' },
+            },
+          },
+        },
+      },
+      required: ['totalFound', 'sourcesSearched', 'works'],
+    }),
+    execute: async ({ query, sources, maxResultsPerSource, fromYear, toYear, openAccessOnly }) =>
+      runToolWithReport(
+        'searchMultiSource',
+        { query, sources: sources || ['arxiv', 'semantic_scholar', 'pubmed', 'crossref', 'medrxiv'], maxResultsPerSource },
+        context,
+        async () => {
+          const result = await searchMultipleSources({
+            query, sources, maxResultsPerSource: maxResultsPerSource || 8,
+            fromYear, toYear, openAccessOnly, signal: context.signal,
+          })
+          const deduplicated = deduplicatePapers(result.allPapers)
+          indexWorks(context.workRegistry, deduplicated)
+          return {
+            totalFound: result.totalFound,
+            sourcesSearched: result.sourcesSearched,
+            sourcesFailed: result.sourcesFailed,
+            works: deduplicated,
+            sourceBreakdown: result.results.map(r => ({ source: r.source, count: r.papers.length, error: r.error })),
+          }
+        },
+      ),
+  })
+
   return {
     searchWorks,
     getConceptTree,
@@ -673,5 +748,6 @@ export function createOpenAlexToolset(context: ToolContext) {
     filterWorks,
     getAuthorWorks,
     rankAndDeduplicate,
+    searchMultiSource,
   }
 }

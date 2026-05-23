@@ -59,6 +59,7 @@ function formatToolLabel(name: ToolCallEvent['name']) {
     filterWorks: '筛选结果',
     getAuthorWorks: '作者作品',
     rankAndDeduplicate: '重排去重',
+    searchMultiSource: '多源学术检索',
   }
 
   return labels[name] || name
@@ -1225,6 +1226,7 @@ function ToolTypeIcon({ type }: { type: ToolCallEvent['name'] }) {
     filterWorks: <FilterIcon />,
     getAuthorWorks: <UserIcon />,
     rankAndDeduplicate: <RankIcon />,
+    searchMultiSource: <SearchLensIcon />,
   }
   return <>{iconMap[type] || <TerminalIcon />}</>
 }
